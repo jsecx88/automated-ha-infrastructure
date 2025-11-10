@@ -1,0 +1,62 @@
+---
+# roles/nginx/tasks/main.yml
+# Runs on web01, web02, and web03 — all three at the same time (in parallel).
+
+# --- Install ---
+
+- name: Install Nginx
+  ansible.builtin.dnf:
+    name: nginx
+    state: present
+  # Why 'present' and not 'latest'?
+  # 'latest' would upgrade Nginx every time the playbook runs, which could
+  # be disruptive. 'present' only installs if it's missing.
+
+# --- Deploy web content ---
+
+- name: Deploy index page
+  # Why a template? Because each server needs to show its own hostname on the page.
+  # Ansible fills in {{ inventory_hostname }} (e.g. "web01") before copying the file.
+  # All three servers get the same template but end up with different pages.
+  ansible.builtin.template:
+    src: index.html.j2
+    dest: /usr/share/nginx/html/index.html
+    owner: nginx
+    group: nginx
+    mode: '0644'
+  notify: Restart Nginx
+
+# --- Firewall ---
+
+- name: Allow HTTP traffic through the firewall
+  # Why: Same reason as the load balancer — firewalld blocks port 80 by default
+  # on Rocky/RHEL 9. We need to open it so HAProxy can reach these nodes.
+  ansible.posix.firewalld:
+    service: http
+    permanent: true
+    state: enabled
+    immediate: true
+
+# --- Enable & Start ---
+
+- name: Enable and start Nginx
+  ansible.builtin.systemd:
+    name: nginx
+    enabled: true
+    state: started
+
+# --- SELinux ---
+# Why: Rocky/RHEL 9 ships with SELinux enforcing by default.
+# Nginx needs the httpd_t context to serve files — this is already correct
+# for files under /usr/share/nginx/html, but we confirm it explicitly.
+
+- name: Set correct SELinux context on web root
+  ansible.builtin.command:
+    cmd: restorecon -Rv /usr/share/nginx/html
+  changed_when: false   # restorecon always exits 0; don't report false changes
+
+handlers:
+  - name: Restart Nginx
+    ansible.builtin.systemd:
+      name: nginx
+      state: restarted

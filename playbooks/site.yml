@@ -1,0 +1,16 @@
+---
+# site.yml — the master playbook.
+# Run this one file to configure the entire cluster from scratch.
+#
+# Usage:
+#   ansible-playbook playbooks/site.yml
+#
+# Why two separate imports instead of one big playbook?
+# It lets you re-run just one part if something goes wrong.
+# Example: if only the web nodes need updating, run webservers.yml directly.
+
+- name: Configure load balancer
+  import_playbook: haproxy.yml
+
+- name: Configure web nodes
+  import_playbook: webservers.yml

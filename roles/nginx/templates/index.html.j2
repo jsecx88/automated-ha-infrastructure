@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<!--
+  index.html.j2 — Jinja2 template for the Nginx web page.
+
+  Why show the hostname? So you can see which server HAProxy sent you to.
+  Each of the three web nodes gets this same template deployed, but
+  {{ inventory_hostname }} becomes "web01", "web02", or "web03" depending
+  on which machine Ansible is configuring at that moment.
+
+  Try refreshing your browser several times — you should cycle through all three.
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>HA Lab — {{ inventory_hostname }}</title>
+  <style>
+    body {
+      font-family: monospace;
+      max-width: 600px;
+      margin: 80px auto;
+      padding: 0 20px;
+      background: #f4f4f4;
+      color: #222;
+    }
+    h1 { font-size: 1.4rem; }
+    .node {
+      display: inline-block;
+      background: #222;
+      color: #7fff7f;
+      padding: 6px 16px;
+      border-radius: 4px;
+      font-size: 1.1rem;
+      letter-spacing: 1px;
+    }
+    p { line-height: 1.6; }
+    .tip { color: #666; font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+  <h1>High Availability Lab</h1>
+
+  <p>Served by: <span class="node">{{ inventory_hostname }}</span></p>
+
+  <p>
+    You're hitting one of three Nginx web nodes sitting behind an HAProxy
+    load balancer. Each refresh may land on a different server.
+  </p>
+
+  <p class="tip">
+    Try: <code>for i in {1..9}; do curl -s http://192.168.56.10 | grep "Served by"; done</code>
+  </p>
+
+  <p class="tip">
+    Stop Nginx on this node with <code>sudo systemctl stop nginx</code> and
+    watch HAProxy automatically remove it from rotation.
+  </p>
+</body>
+</html>

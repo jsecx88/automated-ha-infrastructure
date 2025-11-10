@@ -1,0 +1,15 @@
+---
+# webservers.yml — configures all three Nginx web nodes.
+#
+# Ansible runs these tasks on web01, web02, and web03 in parallel
+# (up to the 'forks' limit set in ansible.cfg).
+#
+# Usage (standalone):
+#   ansible-playbook playbooks/webservers.yml
+
+- name: Set up Nginx web nodes
+  hosts: webservers
+  become: true   # Why: installing packages and writing to /usr/share/nginx require root
+
+  roles:
+    - nginx      # Defined in roles/nginx/

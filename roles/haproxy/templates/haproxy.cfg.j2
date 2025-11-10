@@ -1,0 +1,98 @@
+#---------------------------------------------------------------------
+# haproxy.cfg.j2 — HAProxy configuration template
+#
+# This is a Jinja2 template. Ansible processes it and replaces
+# {{ variables }} before copying the file to the server.
+#
+# Why a template instead of a plain config file?
+# The backend server list is generated from the Ansible inventory.
+# Add a new web node to hosts.ini and this config updates automatically
+# on the next playbook run — no manual editing required.
+#---------------------------------------------------------------------
+
+global
+    # Send log messages to the local syslog daemon
+    log /dev/log local0
+
+    # Maximum number of simultaneous connections HAProxy will accept.
+    # 2000 is more than enough for a lab.
+    maxconn 2000
+
+    # Drop privileges after startup — run as haproxy user, not root
+    user  haproxy
+    group haproxy
+
+    # Run as a background daemon
+    daemon
+
+defaults
+    log     global
+    mode    http          # We're load-balancing HTTP traffic, not raw TCP
+
+    # Log each request with HTTP details (method, URL, status code, etc.)
+    option  httplog
+
+    # Don't log health check requests — they'd flood the logs
+    option  dontlognull
+
+    # How long to wait when opening a connection to a backend server
+    timeout connect 5s
+
+    # How long to wait for the client to send a request
+    timeout client  30s
+
+    # How long to wait for a backend server to respond
+    timeout server  30s
+
+    # Return a proper HTTP 503 page when no backend is available,
+    # instead of dropping the connection silently
+    errorfile 503 /etc/haproxy/errors/503.http
+
+#---------------------------------------------------------------------
+# Frontend — what the outside world connects to
+#
+# Why: The frontend is HAProxy's "listening" side. It accepts connections
+# on port 80 and hands them off to the backend pool.
+#---------------------------------------------------------------------
+frontend http_front
+    bind *:80
+    default_backend web_nodes
+
+#---------------------------------------------------------------------
+# Backend — the pool of real web servers
+#
+# Why 'roundrobin'? It's the simplest algorithm: send request 1 to web01,
+# request 2 to web02, request 3 to web03, request 4 to web01, repeat.
+# For a lab this is perfect. In production you might use 'leastconn' to
+# send to whichever server has the fewest active connections.
+#---------------------------------------------------------------------
+backend web_nodes
+    balance roundrobin
+
+    # Health check: every 2 seconds, send GET / to each server.
+    # If a server doesn't respond with 2xx or 3xx, HAProxy marks it DOWN
+    # and stops sending traffic to it until it recovers.
+    option httpchk GET /
+
+    # This Jinja2 loop generates one 'server' line per web node in the inventory.
+    # With three web nodes in hosts.ini it produces:
+    #   server web01 192.168.56.11:80 check
+    #   server web02 192.168.56.12:80 check
+    #   server web03 192.168.56.13:80 check
+    # The 'check' keyword tells HAProxy to run the health check on this server.
+{% for host in groups['webservers'] %}
+    server {{ host }} {{ hostvars[host]['ansible_host'] }}:80 check
+{% endfor %}
+
+#---------------------------------------------------------------------
+# Stats page (optional but handy)
+#
+# Visit http://192.168.56.10:8404/stats to see a live dashboard of
+# which backends are UP/DOWN and how much traffic each is handling.
+#---------------------------------------------------------------------
+frontend stats
+    bind *:8404
+    stats enable
+    stats uri /stats
+    stats refresh 5s
+    stats show-node

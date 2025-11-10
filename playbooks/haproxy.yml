@@ -1,0 +1,15 @@
+---
+# haproxy.yml — configures the load balancer (lb01).
+#
+# This playbook targets only the [loadbalancers] group from the inventory,
+# so it won't touch the web nodes at all.
+#
+# Usage (standalone):
+#   ansible-playbook playbooks/haproxy.yml
+
+- name: Set up HAProxy load balancer
+  hosts: loadbalancers
+  become: true   # Why: installing packages and editing /etc/haproxy require root
+
+  roles:
+    - haproxy    # Defined in roles/haproxy/

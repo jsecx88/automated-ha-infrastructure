@@ -1,0 +1,60 @@
+---
+# roles/haproxy/tasks/main.yml
+# Every task here runs on lb01 as root (because the playbook has become: true).
+# Ansible runs tasks top to bottom, stopping on the first failure.
+
+# --- Install ---
+
+- name: Install HAProxy
+  # Why: dnf is the package manager on Rocky/RHEL 9.
+  # 'state: present' means "install it if it's not already there."
+  # Running this again later is safe — it won't reinstall if it's already installed.
+  ansible.builtin.dnf:
+    name: haproxy
+    state: present
+
+# --- Configure ---
+
+- name: Deploy HAProxy configuration
+  # Why: We use a template (haproxy.cfg.j2) instead of a static file so that
+  # Ansible can fill in the web server IPs automatically from the inventory.
+  # If you add a fourth web node, you only update hosts.ini — this task adapts.
+  ansible.builtin.template:
+    src: haproxy.cfg.j2
+    dest: /etc/haproxy/haproxy.cfg
+    owner: root
+    group: root
+    mode: '0644'
+    validate: haproxy -c -f %s   # Check the config is valid before writing it
+  notify: Restart HAProxy         # If this changes, restart HAProxy at the end
+
+# --- Firewall ---
+
+- name: Allow HTTP traffic through the firewall
+  # Why: Rocky/RHEL 9 ships with firewalld enabled and blocking by default.
+  # Without this, requests to port 80 would be silently dropped.
+  ansible.posix.firewalld:
+    service: http
+    permanent: true
+    state: enabled
+    immediate: true
+
+# --- Enable & Start ---
+
+- name: Enable and start HAProxy
+  # Why: 'enabled: true' means HAProxy will start automatically on boot.
+  # 'state: started' means start it now if it's not running.
+  ansible.builtin.systemd:
+    name: haproxy
+    enabled: true
+    state: started
+
+# --- Handlers ---
+# Handlers only run if something above triggered them with 'notify'.
+# This prevents unnecessary service restarts when nothing changed.
+
+handlers:
+  - name: Restart HAProxy
+    ansible.builtin.systemd:
+      name: haproxy
+      state: restarted
